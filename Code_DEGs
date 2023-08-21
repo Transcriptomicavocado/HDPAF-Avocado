@@ -1,0 +1,323 @@
+dat<-read.table("Counts_3time_new.txt",header = T,quote = "",row.names = 1)
+
+dat <- as.data.frame(dat)
+head(dat)
+
+#colnames(dat) <- c("FC0_1","FC0_2","FC0_3","FC1_1","FC1_2","FC24_1","FC24_2","FC24_3","FC72_1","FC72_2","FC72_3","F0_1","F0_2","F0_3", "F1_1","F1_2","F1_3", "F24_1","F24_2","F24_3", "F72_1","F72_2","F72_3")
+#head(dat)
+#dat <- dat[!(dat$FC0_1==0 & dat$FC0_2==0 & dat$FC0_3==0 & dat$FC1_1==0 & dat$FC1_2==0 &  dat$FC24_1==0 & dat$FC24_2==0 & dat$FC24_3==0 & dat$FC72_1==0 & dat$FC72_2==0 & dat$FC72_3==0 & dat$F0_1==0 & dat$F0_2==0 & dat$F0_3==0 & dat$F1_1==0 & dat$F1_2==0 & dat$F1_3==0 & dat$F24_1==0 & dat$F24_2==0 & dat$F24_3==0 & dat$F72_1==0 & dat$F72_2==0 & dat$F72_3==0),]
+
+class <- c( rep("FC1",3),rep("FC24",3), rep("FC72",3),rep("F1",3),rep("F24",3), rep("F72",3))
+y <- DGEList(counts = dat, group=factor(class))
+head(y)
+# Normalizacion TMM #SIN FILTRO
+y <- calcNormFactors(y)
+y <- estimateCommonDisp(y, verbose=TRUE)
+y <- estimateTagwiseDisp(y)
+#et <- exactTest(y)
+#counts <- getCounts(y)
+#cor(y$counts,method = "pearson")
+#head(y$counts)
+plotMDS(y$counts, top = 1000, xlab ="dim 1",ylab = "dim 2", main = "MDS plot FCvsF",col=c(rep("Red",3),rep("Black",3),rep("Brown",3),rep("Orange",3),rep("Green",3),rep("Purple",3)))
+####pearson correlation
+library(corrplot)
+library(ComplexHeatmap)
+c<-cor(y$counts,method = "pearson")
+col <- colorRampPalette(c("red","white","blue")) (20)
+#heatmap(x=c, col=col, symm = TRUE)
+Heatmap(c, col = col, name = "correlación de Pearson", col)
+head(cpm(y))
+keep = rowSums(cpm(y)>1) >=2
+head(keep)
+y2= y[keep, , keep.lib.sizes=FALSE]
+head(y2)
+y3 <- DGEList(counts = y2$counts, group = class, genes = rownames(y2$counts))
+head(y3)
+y3 <- calcNormFactors(y3)
+y3<-estimateCommonDisp(y3,verbose=TRUE)
+y3<- estimateTagwiseDisp(y3)
+plotBCV(y3)
+###############################################################3
+##             expresion T1
+###########################################################################
+et = exactTest(y3, dispersion = y3$tagwise.dispersion, pair = c("FC1","F1"))
+head(et$table)
+#sum(et$table$PValue < 0.05)
+et1 <- et
+y3T1 <- topTags(et, n=Inf)$table
+head(y3T1)
+OrdenadosT1 <- y3T1[order(y3T1$FDR <= 0.01),]
+dim(OrdenadosT1)
+head(OrdenadosT1)
+res.EdgeRT1 <- as.data.frame(OrdenadosT1)[1:100,]
+dim(res.EdgeRT1)
+head(res.EdgeRT1)
+###################
+###intentar un heatmap
+write.csv(y3T1, "resFDRT1_new.csv")#modificar la primera columna con Geneid
+
+Results_EdgeRT1 <- read.csv("resFDRT1_new.csv", header = TRUE,
+                            as.is=TRUE,row.names=1,  quote= "")
+
+head(Results_EdgeRT1)
+rawEdgeR_Results <- Results_EdgeRT1
+#Guardando los mejores 100 resultados anotados y con un pvalue ajustado
+Ordenados <- Results_EdgeRT1[order(Results_EdgeRT1$FDR),]
+dim(Ordenados)
+head(Ordenados)
+# Extraemos los mejores 100
+res.EdgeR2 <- as.data.frame(Ordenados)[1:100,]
+head(res.EdgeR2)
+dim(res.EdgeR2)
+# 6. Guardamos la tabla con todos los genes y el top 100
+write.csv(Ordenados, file="TablaEDTodos_T1.csv")
+write.csv(res.EdgeR2, file="Top100_T1.csv")
+#########################################################
+#  Heatmap
+#########################################################
+# Threshold on the adjusted p-value
+alpha <- 0.01 
+countTable <- read.csv("counts_T1_avodry.csv", header = TRUE, as.is=TRUE,row.names=1,  quote= "")
+head(countTable)
+gene.kept <- rownames(res.EdgeR2)[res.EdgeR2$FDR <= alpha & !is.na(res.EdgeR2$FDR)]
+
+countTable.kept <- log2(countTable)[gene.kept, ]
+countTable.kept
+###escribir la tabla y editar en excel los espacios sin inf cambiarlos por 0
+write.csv(countTable.kept, file= "countTable.kept.csv" )
+dim(countTable.kept)
+countTable.kept1 <- read.csv("countTable.kept.csv", header = TRUE, as.is=TRUE,row.names=1,  quote= "")
+heatmap.2(as.matrix(countTable.kept1), 
+          key=TRUE,
+          keysize = 1.5,
+          density="histogram", 
+          cexCol=0.7,
+          labRow="",
+          trace="none"
+)
+
+col.pan <- colorpanel(50,"royalblue3", "slategray3", "orangered3")
+h1<-heatmap.2(as.matrix(countTable.kept1), 
+          key = TRUE,
+          scale = "row",
+          keysize = 1.5,
+          key.xlab="z-score",
+          key.title = NA,
+          density="histogram", 
+          cexCol=0.7,
+          cexRow=0.3,
+          trace ="none",
+          col=col.pan,
+          main = "1 hpt"
+          
+) 
+###########################################################################
+###            EXPRESION T24
+############################################################################
+
+et = exactTest(y3, dispersion = y3$tagwise.dispersion, pair = c("FC24","F24"))
+et24 <- et
+y3T24 <- topTags(et, n=Inf)$table
+yUDT24 = rownames(y3T24)[y3T24$FDR <= 0.05 & abs(y3T24$logFC) >= 1]
+y05T24 = rownames(y3T24)[y3T24$FDR <= 0.05]
+
+sum(y3T24$logFC>=1 & y3T24$FDR<=0.05)
+sum(y3T24$logFC<=-1 & y3T24$FDR<=0.05)
+sum(abs(y3T24$logFC)>=1 & y3T24$FDR<=0.05)
+summary(deT24 <- decideTestsDGE(et24, adjust.method="BH", p=0.05))
+sum(y3T24$FDR<=0.05)
+####################
+DEGdfT24 <- mutate(y3T24, sig=ifelse(y3T24$FDR<=0.05 & y3T24$logFC<=-1 | y3T24$FDR<=0.05 & y3T24$logFC>=1, "Significante", "No Significante")) 
+volc = ggplot(DEGdfT24, aes(logFC, -log10(FDR))) + #log2Foldchange vs FDR
+  geom_point(aes(col=sig)) + # the points are colored by significance
+  scale_color_manual(values=c("blue", "red")) + 
+  ggtitle("Volcano Plot T24") #e.g. 'Title description'
+ggsave("VolcanoplotT24.jpeg", device="jpeg")
+#nuevo mapa de volcan T24
+#agregar la columna expresion
+dataT24 <- y3T24 %>% 
+  mutate(
+    expression = case_when(logFC >= log(2) & FDR <= 0.05 ~ "up regulated",
+                           logFC <= -log(2) & FDR <= 0.05 ~ "down regulated",
+                           TRUE ~ "no changues")
+  )
+#generar un volcano con los genes up y down
+volc = ggplot(dataT24, aes(logFC, -log(FDR,10))) +
+  geom_point(aes(color = expression), size = 2/5) +
+  xlab(expression("log"[2]*"FC")) + 
+  ylab(expression("-log"[10]*"FDR")) +
+  scale_color_manual(values = c("royalblue3", "slategray3", "orangered3")) +
+  guides(colour = guide_legend(override.aes = list(size=1.5)))+
+  ggtitle("F vs FC 24 hpt")+
+  geom_vline(xintercept =c(-1,1), linetype = 1,
+             col = "black")+
+  geom_hline(yintercept =-log10(0.05), linetype = 1, col="black")
+volc
+ggsave("VolcanoplotT24_lines_new_3time.jpeg", device="jpeg")
+
+###################
+### heatmap T24
+write.csv(y3T24, "resFDRT24_1.csv")#modificar la primera columna con Geneid
+
+Results_EdgeRT24 <- read.csv("resFDRT24_1_editada.csv", header = TRUE,
+                             as.is=TRUE,row.names=1,  quote= "")
+
+head(Results_EdgeRT24)
+rawEdgeR_Results <- Results_EdgeRT24
+#Guardando los mejores 100 resultados anotados y con un pvalue ajustado
+Ordenados <- Results_EdgeRT24[order(Results_EdgeRT24$FDR),]
+dim(Ordenados)
+head(Ordenados)
+# Extraemos los mejores 100
+res.EdgeR2 <- as.data.frame(Ordenados)[1:100,]
+head(res.EdgeR2)
+dim(res.EdgeR2)
+# 6. Guardamos la tabla con todos los genes y el top 100
+write.csv(Ordenados, file="TablaEDTodos_T24.csv")
+write.csv(res.EdgeR2, file="Top100_T24.csv")
+#########################################################
+# Grafico de Heatmap
+#########################################################
+# Threshold on the adjusted p-value
+alpha <- 0.01 
+countTable <- read.csv("counts_T24_avodry.csv", header = TRUE, as.is=TRUE,row.names=1,  quote= "")
+head(countTable)
+gene.kept <- rownames(res.EdgeR2)[res.EdgeR2$FDR <= alpha & !is.na(res.EdgeR2$FDR)]
+
+countTable.kept <- log2(countTable)[gene.kept, ]
+countTable.kept
+###escribir la tabla y editar en excel los espacios sin inf cambiarlos por 0
+write.csv(countTable.kept, file= "countTable.kept_T24.csv" )
+dim(countTable.kept)
+countTable.kept1 <- read.csv("countTable.kept_T24.csv", header = TRUE, as.is=TRUE,row.names=1,  quote= "")
+heatmap.2(as.matrix(countTable.kept1), 
+          key=TRUE,
+          keysize = 1.5,
+          density="histogram", 
+          cexCol=0.7,
+          labRow="",
+          trace="none"
+)
+
+col.pan <- colorpanel(50,"royalblue3", "slategray3", "orangered3")
+h2<-heatmap.2(as.matrix(countTable.kept1), 
+          key = TRUE,
+          scale = "row",
+          keysize = 1.5,
+          key.xlab="z-score",
+          key.title = NA,
+          density="histogram", 
+          cexCol=0.7,
+          cexRow=0.3,
+          trace ="none",
+          col=col.pan,
+          main = "24 hpt"
+          
+)
+#al agregarle la opcion scale= row ya acomoda por z- score
+
+############################################################################
+###            EXPRESION T72
+############################################################################
+
+et = exactTest(y3, dispersion = y3$tagwise.dispersion, pair = c("FC72","F72"))
+et72 <- et
+y3T72 <- topTags(et, n=Inf)$table
+yUDT72 = rownames(y3T72)[y3T72$FDR <= 0.05 & abs(y3T72$logFC) >= 1]
+y05T72 = rownames(y3T72)[y3T72$FDR <= 0.05]
+
+sum(y3T72$logFC>=1 & y3T72$FDR<=0.05)
+sum(y3T72$logFC<=-1 & y3T72$FDR<=0.05)
+sum(abs(y3T72$logFC)>=1 & y3T72$FDR<=0.05)
+summary(deT72 <- decideTestsDGE(et72, adjust.method="BH", p=0.05))
+sum(y3T72$FDR<=0.05)
+
+###volcano plot t72
+DEGdfT72 <- mutate(y3T72, sig=ifelse(y3T72$FDR<=0.05 & y3T72$logFC<=-1 | y3T72$FDR<=0.05 & y3T72$logFC>=1, "Significante", "No Significante")) 
+volc = ggplot(DEGdfT72, aes(logFC, -log10(FDR))) + #log2Foldchange vs FDR
+  geom_point(aes(col=sig)) + # the points are colored by significance
+  scale_color_manual(values=c("blue", "red")) + 
+  ggtitle("Volcano Plot T72") #e.g. 'Title description'
+ggsave("VolcanoplotT72.jpeg", device="jpeg")
+
+#nuevo mapa de volcan T24
+#agregar la columna expresion
+dataT72 <- y3T72 %>% 
+  mutate(
+    expression = case_when(logFC >= log(2) & FDR <= 0.05 ~ "up regulated ",
+                           logFC <= -log(2) & FDR <= 0.05 ~ "down regulated ",
+                           TRUE ~ "no changues")
+  )
+#generar un volcano con los genes up y down
+volc = ggplot(dataT72, aes(logFC, -log(FDR,10))) +
+  geom_point(aes(color = expression), size = 2/5) +
+  xlab(expression("log"[2]*"FC")) + 
+  ylab(expression("-log"[10]*"FDR")) +
+  scale_color_manual(values = c("royalblue3", "slategray3", "orangered3")) +
+  guides(colour = guide_legend(override.aes = list(size=1.5)))+
+  ggtitle("F vs FC 72 hpt")+
+  geom_vline(xintercept =c(-1,1), linetype = 1,
+             col = "black")+
+  geom_hline(yintercept =-log10(0.05), linetype = 1, col="black")
+volc
+ggsave("VolcanoplotT72_lines_new_3time.jpeg", device="jpeg")
+
+###################
+### heatmap T72
+write.csv(y3T72, "resFDRT72_1.csv")#modificar la primera columna con Geneid
+
+Results_EdgeRT72 <- read.csv("resFDRT72_1_editada.csv", header = TRUE,
+                             as.is=TRUE,row.names=1,  quote= "")
+
+head(Results_EdgeRT72)
+rawEdgeR_Results <- Results_EdgeRT72
+#Guardando los mejores 100 resultados anotados y con un pvalue ajustado
+Ordenados <- Results_EdgeRT72[order(Results_EdgeRT72$FDR),]
+dim(Ordenados)
+head(Ordenados)
+# Extraemos los mejores 100
+res.EdgeR2 <- as.data.frame(Ordenados)[1:100,]
+head(res.EdgeR2)
+dim(res.EdgeR2)
+# 6. Guardamos la tabla con todos los genes y el top 100
+write.csv(Ordenados, file="TablaEDTodos_T72.csv")
+write.csv(res.EdgeR2, file="Top100_T72.csv")
+#########################################################
+# Grafico de Heatmap
+#########################################################
+# Threshold on the adjusted p-value
+alpha <- 0.01 
+countTable <- read.csv("counts_T72_avodry.csv", header = TRUE, as.is=TRUE,row.names=1,  quote= "")
+head(countTable)
+gene.kept <- rownames(res.EdgeR2)[res.EdgeR2$FDR <= alpha & !is.na(res.EdgeR2$FDR)]
+
+countTable.kept <- log2(countTable)[gene.kept, ]
+countTable.kept
+###escribir la tabla y editar en excel los espacios sin inf cambiarlos por 0
+write.csv(countTable.kept, file= "countTable.kept_T72.csv" )
+dim(countTable.kept)
+countTable.kept1 <- read.csv("countTable.kept_T72.csv", header = TRUE, as.is=TRUE,row.names=1,  quote= "")
+heatmap.2(as.matrix(countTable.kept1), 
+          key=TRUE,
+          keysize = 1.5,
+          density="histogram", 
+          cexCol=0.7,
+          labRow="",
+          trace="none"
+)
+
+col.pan <- colorpanel(50,"royalblue3", "slategray3", "orangered3")
+h3<-heatmap.2(as.matrix(countTable.kept1), 
+          key = TRUE,
+          scale = "row",
+          keysize = 1.5,
+          key.xlab="z-score",
+          key.title = NA,
+          density="histogram", 
+          cexCol=0.7,
+          cexRow=0.3,
+          trace ="none",
+          col=col.pan,
+          main = "72 hpt"
+          
+)
