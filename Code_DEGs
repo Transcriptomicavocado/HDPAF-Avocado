@@ -10,7 +10,7 @@ head(dat)
 class <- c( rep("FC1",3),rep("FC24",3), rep("FC72",3),rep("F1",3),rep("F24",3), rep("F72",3))
 y <- DGEList(counts = dat, group=factor(class))
 head(y)
-# Normalizacion TMM #SIN FILTRO
+# Normalizacion TMM 
 y <- calcNormFactors(y)
 y <- estimateCommonDisp(y, verbose=TRUE)
 y <- estimateTagwiseDisp(y)
@@ -52,24 +52,55 @@ head(OrdenadosT1)
 res.EdgeRT1 <- as.data.frame(OrdenadosT1)[1:100,]
 dim(res.EdgeRT1)
 head(res.EdgeRT1)
+
+###volcano plot t1
+DEGdfT72 <- mutate(y3T1, sig=ifelse(y3T1$FDR<=0.05 & y3T1$logFC<=-1 | y3T1$FDR<=0.05 & y3T1$logFC>=1, "Significante", "No Significante")) 
+volc = ggplot(DEGdfT1, aes(logFC, -log10(FDR))) + #log2Foldchange vs FDR
+  geom_point(aes(col=sig)) + # the points are colored by significance
+  scale_color_manual(values=c("blue", "red")) + 
+  ggtitle("Volcano Plot T1") #e.g. 'Title description'
+ggsave("VolcanoplotT1.jpeg", device="jpeg")
+
+#new T24 volcano map
+#add expression column
+dataT1 <- y3T1 %>% 
+  mutate(
+    expression = case_when(logFC >= log(2) & FDR <= 0.05 ~ "up regulated ",
+                           logFC <= -log(2) & FDR <= 0.05 ~ "down regulated ",
+                           TRUE ~ "no changues")
+  )
+#generate a volcano with the up and down genes
+volc = ggplot(dataT1, aes(logFC, -log(FDR,10))) +
+  geom_point(aes(color = expression), size = 2/5) +
+  xlab(expression("log"[2]*"FC")) + 
+  ylab(expression("-log"[10]*"FDR")) +
+  scale_color_manual(values = c("royalblue3", "slategray3", "orangered3")) +
+  guides(colour = guide_legend(override.aes = list(size=1.5)))+
+  ggtitle("F vs FC T1 hpt")+
+  geom_vline(xintercept =c(-1,1), linetype = 1,
+             col = "black")+
+  geom_hline(yintercept =-log10(0.05), linetype = 1, col="black")
+volc
+ggsave("VolcanoplotT1_lines_new_3time.jpeg", device="jpeg")
+
 ###################
-###intentar un heatmap
-write.csv(y3T1, "resFDRT1_new.csv")#modificar la primera columna con Geneid
+### heatmap
+write.csv(y3T1, "resFDRT1_new.csv")#modify the first column with Geneid
 
 Results_EdgeRT1 <- read.csv("resFDRT1_new.csv", header = TRUE,
                             as.is=TRUE,row.names=1,  quote= "")
 
 head(Results_EdgeRT1)
 rawEdgeR_Results <- Results_EdgeRT1
-#Guardando los mejores 100 resultados anotados y con un pvalue ajustado
+#Saving the best 100 scored results and with an adjusted pvalue
 Ordenados <- Results_EdgeRT1[order(Results_EdgeRT1$FDR),]
 dim(Ordenados)
 head(Ordenados)
-# Extraemos los mejores 100
+# We extract the best 100
 res.EdgeR2 <- as.data.frame(Ordenados)[1:100,]
 head(res.EdgeR2)
 dim(res.EdgeR2)
-# 6. Guardamos la tabla con todos los genes y el top 100
+# 6. We save the table with all the genes and the top 100
 write.csv(Ordenados, file="TablaEDTodos_T1.csv")
 write.csv(res.EdgeR2, file="Top100_T1.csv")
 #########################################################
@@ -83,7 +114,7 @@ gene.kept <- rownames(res.EdgeR2)[res.EdgeR2$FDR <= alpha & !is.na(res.EdgeR2$FD
 
 countTable.kept <- log2(countTable)[gene.kept, ]
 countTable.kept
-###escribir la tabla y editar en excel los espacios sin inf cambiarlos por 0
+###write the table and edit in excel the spaces without inf change them to 0
 write.csv(countTable.kept, file= "countTable.kept.csv" )
 dim(countTable.kept)
 countTable.kept1 <- read.csv("countTable.kept.csv", header = TRUE, as.is=TRUE,row.names=1,  quote= "")
@@ -141,7 +172,7 @@ dataT24 <- y3T24 %>%
                            logFC <= -log(2) & FDR <= 0.05 ~ "down regulated",
                            TRUE ~ "no changues")
   )
-#generar un volcano con los genes up y down
+#generate a volcano with the up and down genes
 volc = ggplot(dataT24, aes(logFC, -log(FDR,10))) +
   geom_point(aes(color = expression), size = 2/5) +
   xlab(expression("log"[2]*"FC")) + 
@@ -164,15 +195,15 @@ Results_EdgeRT24 <- read.csv("resFDRT24_1_editada.csv", header = TRUE,
 
 head(Results_EdgeRT24)
 rawEdgeR_Results <- Results_EdgeRT24
-#Guardando los mejores 100 resultados anotados y con un pvalue ajustado
+#Saving the best 100 scored results and with an adjusted pvalue
 Ordenados <- Results_EdgeRT24[order(Results_EdgeRT24$FDR),]
 dim(Ordenados)
 head(Ordenados)
-# Extraemos los mejores 100
+# We extract the best 100
 res.EdgeR2 <- as.data.frame(Ordenados)[1:100,]
 head(res.EdgeR2)
 dim(res.EdgeR2)
-# 6. Guardamos la tabla con todos los genes y el top 100
+# 6. We save the table with all the genes and 
 write.csv(Ordenados, file="TablaEDTodos_T24.csv")
 write.csv(res.EdgeR2, file="Top100_T24.csv")
 #########################################################
@@ -214,7 +245,7 @@ h2<-heatmap.2(as.matrix(countTable.kept1),
           main = "24 hpt"
           
 )
-#al agregarle la opcion scale= row ya acomoda por z- score
+
 
 ############################################################################
 ###            EXPRESION T72
@@ -240,15 +271,15 @@ volc = ggplot(DEGdfT72, aes(logFC, -log10(FDR))) + #log2Foldchange vs FDR
   ggtitle("Volcano Plot T72") #e.g. 'Title description'
 ggsave("VolcanoplotT72.jpeg", device="jpeg")
 
-#nuevo mapa de volcan T24
-#agregar la columna expresion
+#new T24 volcano map
+#add expression column
 dataT72 <- y3T72 %>% 
   mutate(
     expression = case_when(logFC >= log(2) & FDR <= 0.05 ~ "up regulated ",
                            logFC <= -log(2) & FDR <= 0.05 ~ "down regulated ",
                            TRUE ~ "no changues")
   )
-#generar un volcano con los genes up y down
+#generating a volcano with the up and down genes
 volc = ggplot(dataT72, aes(logFC, -log(FDR,10))) +
   geom_point(aes(color = expression), size = 2/5) +
   xlab(expression("log"[2]*"FC")) + 
@@ -271,15 +302,15 @@ Results_EdgeRT72 <- read.csv("resFDRT72_1_editada.csv", header = TRUE,
 
 head(Results_EdgeRT72)
 rawEdgeR_Results <- Results_EdgeRT72
-#Guardando los mejores 100 resultados anotados y con un pvalue ajustado
+#Saving the best 100 results scored and with an adjusted pvalue.
 Ordenados <- Results_EdgeRT72[order(Results_EdgeRT72$FDR),]
 dim(Ordenados)
 head(Ordenados)
-# Extraemos los mejores 100
+# We extract the best 100
 res.EdgeR2 <- as.data.frame(Ordenados)[1:100,]
 head(res.EdgeR2)
 dim(res.EdgeR2)
-# 6. Guardamos la tabla con todos los genes y el top 100
+# Save the table with all genes and the top 100.
 write.csv(Ordenados, file="TablaEDTodos_T72.csv")
 write.csv(res.EdgeR2, file="Top100_T72.csv")
 #########################################################
