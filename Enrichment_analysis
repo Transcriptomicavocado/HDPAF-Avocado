@@ -1,0 +1,331 @@
+#packages
+
+library(clusterProfiler)
+library(DOSE)               # GO analysis
+library(enrichplot)         # GO analysis
+library(org.At.tair.db)     # GO analysis
+library(edgeR)
+library(ggplot2)
+library(pheatmap)
+library(tidyverse)
+library(gplots)
+library(dplyr)
+library(pathview)
+library(org.Hs.eg.db)
+
+#calculate the expression for filtering by FDR expression data table
+
+dat<-read.table("Counts_3time1.txt",header = T,quote = "",row.names = 1)
+
+dat <- as.data.frame(dat)
+head(dat)
+
+#colnames(dat) <- c("FC0_1","FC0_2","FC0_3","FC1_1","FC1_2","FC24_1","FC24_2","FC24_3","FC72_1","FC72_2","FC72_3","F0_1","F0_2","F0_3", "F1_1","F1_2","F1_3", "F24_1","F24_2","F24_3", "F72_1","F72_2","F72_3")
+#head(dat)
+#dat <- dat[!(dat$FC0_1==0 & dat$FC0_2==0 & dat$FC0_3==0 & dat$FC1_1==0 & dat$FC1_2==0 &  dat$FC24_1==0 & dat$FC24_2==0 & dat$FC24_3==0 & dat$FC72_1==0 & dat$FC72_2==0 & dat$FC72_3==0 & dat$F0_1==0 & dat$F0_2==0 & dat$F0_3==0 & dat$F1_1==0 & dat$F1_2==0 & dat$F1_3==0 & dat$F24_1==0 & dat$F24_2==0 & dat$F24_3==0 & dat$F72_1==0 & dat$F72_2==0 & dat$F72_3==0),]
+class <- c( rep("FC0",3),rep("FC24",3), rep("FC72",3),rep("F0",3),rep("F24",3), rep("F72",3))
+y <- DGEList(counts = dat, group=factor(class))
+head(cpm(y))
+keep = rowSums(cpm(y)>1) >=2
+head(keep)
+y2= y[keep, , keep.lib.sizes=FALSE]
+head(y2)
+y3 <- DGEList(counts = y2$counts, group = class, genes = rownames(y2$counts))
+y3 <- calcNormFactors(y3)
+y3<-estimateCommonDisp(y3,verbose=TRUE)
+y3<- estimateTagwiseDisp(y3)
+
+############################################################
+##T1
+
+et = exactTest(y3, dispersion = y3$tagwise.dispersion, pair = c("FC1","F1"))
+head(et$table)
+et1 <- et
+y3T1 <- topTags(et, n=Inf)$table
+deg_table_T1 <- as.data.frame(topTags(et1, n = nrow(y3), sort.by = 'PValue'))
+head(deg_table_T1)
+deg_table_T1<- deg_table_T1 %>%
+  dplyr::mutate(gene = rownames(deg_table_T1),
+                type = ifelse(FDR < 0.05 & abs(logFC) > 1.0, 'significant', 'not significant')) %>%
+  dplyr::select(gene, logFC, logCPM, PValue, FDR, type)
+write.table(deg_table_T1, file = 'deg_table_T1_norm.tsv', col.names = TRUE, row.names = FALSE, sep = '\t', quote = FALSE)
+
+##modify the geneId in the last word to match the annotation of arabidopsis
+
+##Tables for T1 expression data
+ID_DGET1 <- as.data.frame(read.csv("dge_table_T1_norm.csv"))
+anotation <- as.data.frame(read.csv ("anotation_avodry_Coge.csv"))
+
+Expredif_T1 <- inner_join(ID_DGET1,anotation, by="gene")
+
+write.csv(Expredif_T1,file = "FinalEXP_anotation_T1_FDR_type_norm.csv")
+#sort the table with the arabidopsis IDs and remove the .1 or .2 from it
+
+DGET1_arabidopsis <- as.data.frame(read.csv("dge_table_T1_norm_arabidopsis.csv"))
+
+gene_names <- DGET1_arabidopsis$gene
+gene_pval <- DGET1_arabidopsis$PValue           # deg_table$PValue
+gene_qval <- DGET1_arabidopsis$FDR              # deg_table$FDR
+gene_fc   <- DGET1_arabidopsis$logFC    # deg_table$logFC
+names(gene_pval) <- names(gene_qval) <- gene_names
+deg_names <- gene_names[DGET1_arabidopsis$type == 'significant']
+head(deg_names)
+
+egoT1 <- enrichGO(gene = deg_names,         # interested genes
+                  universe = gene_names,    # background genes
+                  OrgDb = org.At.tair.db,
+                  keyType = 'TAIR',
+                  ont = 'BP',
+                  pAdjustMethod = 'BH',
+                  pvalueCutoff = 1.0,
+                  qvalueCutoff = 1.0,
+                  readable = FALSE)
+
+
+ego <- dropGO(egoT1, level = 1)
+ego <- dropGO(egoT1, level = 2)
+ego <- dropGO(egoT1, level = 3)
+go_table <- summary(ego)
+
+
+
+bg_annotated <- as.integer(sapply(strsplit(go_table$BgRatio, '/'), '[', 1))
+go_table <- go_table[100 < bg_annotated & bg_annotated < 500, ]
+go_table$p.adjust <- p.adjust(go_table$pvalue)
+
+go_table[go_table$p.adjust < 0.1, ]
+
+write.csv(go_table, file = "enriquecimiento_clusterprofiler_T1_norm.csv")
+####generate dotplot plots
+p1 = dotplot(ego, showCategory=20, font.size = 10, x ="GeneRatio", color = 'p.adjust',title = "PB_1 hpt")
+ggsave("dotplot_T1_norm_1.jpeg", device="jpeg")
+#require(DOSE)
+#dotplot(ego, showCategory=20, x ="GeneRatio", font.size = 7, color = 'p.adjust',title = "PB_1 hpi")
+#goplot(ego, showCategory = 20, color = 'p.adjust')
+#barplot(ego, showCategory=20, color = "p.adjust",title = "PB_1 hpi")
+
+#To overview the significant GO terms and the annotated genes, we use cnetplot to visualize the result of enrichment analysis.
+library(DOSE)
+edox <- setReadable(ego, 'org.At.tair.db', 'TAIR')
+cnetplot(edox, showCategory = 20, font.size = 7, foldChange = gene_fc, categorySize = 'p.adjust')
+
+##KEEG route analysis
+
+kegg_T1 <- enrichKEGG(gene = deg_names,
+                      organism = 'ath',
+                      universe = gene_names,
+                      keyType = "kegg",
+                      pAdjustMethod = "BH",
+                      pvalueCutoff = 0.05)
+
+tab.kegg <- as.data.frame(kegg_T1)
+tab.kegg<- subset(tab.kegg, Count>2)
+tab.kegg[1:5, 1:6]
+
+dotplot(kegg_T1, x= "GeneRatio", color = "p.adjust", showCategory = 20, title= "KEGG 1 hpt")
+
+
+############################################################
+##T24
+
+et = exactTest(y3, dispersion = y3$tagwise.dispersion, pair = c("FC24","F24"))
+head(et$table)
+et24 <- et
+y3T24 <- topTags(et24, n=Inf)$table
+deg_table_T24 <- as.data.frame(topTags(et24, n = nrow(y3), sort.by = 'PValue'))
+head(deg_table_T24)
+deg_table_T24<- deg_table_T24 %>%
+  dplyr::mutate(gene = rownames(deg_table_T24),
+                type = ifelse(FDR < 0.05 & abs(logFC) > 1.0, 'significant', 'not significant')) %>%
+  dplyr::select(gene, logFC, logCPM, PValue, FDR, type)
+write.table(deg_table_T24, file = 'deg_table_T24_3time.tsv', col.names = TRUE, row.names = FALSE, sep = '\t', quote = FALSE)
+##modificar los geneId en la ultima palabra para que coincida con la anotacion de arabidopsis
+
+##Tables for T24 expression data
+ID_DGET24 <- as.data.frame(read.csv("deg_table_T24_3time.csv"))
+anotation <- as.data.frame(read.csv ("anotation_avodry_Coge.csv"))
+
+Expredif_T24 <- inner_join(ID_DGET24,anotation, by="gene")
+
+write.csv(Expredif_T24,file = "FinalEXP_anotation_T24_FDR_type_3time.csv")
+#sort the table with the arabidopsis IDs and remove the .1 or .2 from it
+DGET24_arabidopsis <- as.data.frame(read.csv("deg_table_T24_3time_arabidopsis.csv"))
+
+gene_names <- DGET24_arabidopsis$gene
+gene_pval <- DGET24_arabidopsis$PValue           # deg_table$PValue
+gene_qval <- DGET24_arabidopsis$FDR              # deg_table$FDR
+gene_fc   <- DGET24_arabidopsis$logFC    # deg_table$logFC
+names(gene_pval) <- names(gene_qval) <- gene_names
+deg_names <- gene_names[DGET24_arabidopsis$type == 'significant']
+head(deg_names)
+
+egoT24 <- enrichGO(gene = deg_names,         # interested genes
+                   universe = gene_names,    # background genes
+                   OrgDb = org.At.tair.db,
+                   keyType = 'TAIR',
+                   ont = 'BP',
+                   pAdjustMethod = 'BH',
+                   pvalueCutoff = 1.0,
+                   qvalueCutoff = 1.0,
+                   readable = FALSE)
+
+
+ego <- dropGO(egoT24, level = 1)
+ego <- dropGO(egoT24, level = 2)
+ego <- dropGO(egoT24, level = 3)
+go_table <- summary(ego)
+
+
+
+bg_annotated <- as.integer(sapply(strsplit(go_table$BgRatio, '/'), '[', 1))
+go_table <- go_table[100 < bg_annotated & bg_annotated < 500, ]
+go_table$p.adjust <- p.adjust(go_table$pvalue)
+
+go_table[go_table$p.adjust < 0.05, ]
+write.csv(go_table, file = "enriquecimiento_clusterprofiler_T24_3time.csv")
+
+##generate dotplot plots
+p1 = dotplot(ego, showCategory=20, font.size = 10, x ="GeneRatio", color = 'p.adjust',title = "PB_24 hpt")
+p1
+ggsave("dotplot_T24_3time_1.jpeg", device="jpeg")
+
+#require(DOSE)
+dotplot(ego, showCategory=20, x ="GeneRatio", font.size = 7, color = 'p.adjust',title = "PB_24 hpt")
+#goplot(ego, showCategory = 20, color = 'p.adjust')
+#barplot(ego, showCategory=20, color = "p.adjust",title = "PB_1 hpi")
+
+#To overview the significant GO terms and the annotated genes, we use cnetplot to visualize the result of enrichment analysis.
+
+library(DOSE)
+
+edox <- setReadable(ego, 'org.At.tair.db', 'TAIR')
+gene_fc
+gene_names
+names(gene_fc) <- gene_names
+p2 = cnetplot(edox, showCategory = 10, foldChange = gene_fc, categorySize = 'p.adjust')
+ggsave("cnetplot_T24_norm_3time_3.jpeg", device="jpeg", width = 8.47, height = 5.93)
+
+#edox <- setReadable(ego, 'org.At.tair.db', 'TAIR')
+#cnetplot(edox, showCategory = 20, font.size = 7, foldChange = gene_fc, categorySize = 'p.adjust')
+
+kegg_T24 <- enrichKEGG(gene = deg_names,
+                       organism = 'ath',
+                       universe = gene_names,
+                       keyType = "kegg",
+                       pAdjustMethod = "none",
+                       pvalueCutoff = 0.05)
+
+
+
+head(kegg_T24)
+tab.kegg <- as.data.frame(kegg_T24)
+tab.kegg<- subset(tab.kegg, Count>5)
+tab.kegg[1:5, 1:6]
+
+dotplot(kegg_T24, x= "GeneRatio", color = "p.adjust", showCategory = 20, title= "KEGG 24 hpt")
+
+keggt24 <- setReadable(kegg_T24, 'org.At.tair.db', 'TAIR')
+cnetplot(keggt24, categorySize="Pvalue", foldChange=gene_fc)
+
+
+############################################################
+##T72
+
+et = exactTest(y3, dispersion = y3$tagwise.dispersion, pair = c("FC72","F72"))
+head(et$table)
+et72 <- et
+y3T72 <- topTags(et, n=Inf)$table
+deg_table_T72 <- as.data.frame(topTags(et72, n = nrow(y3), sort.by = 'PValue'))
+head(deg_table_T72)
+deg_table_T72<- deg_table_T72 %>%
+  dplyr::mutate(gene = rownames(deg_table_T72),
+                type = ifelse(FDR < 0.05 & abs(logFC) > 1.0, 'significant', 'not significant')) %>%
+  dplyr::select(gene, logFC, logCPM, PValue, FDR, type)
+write.table(deg_table_T72, file = 'deg_table_T72_3time.tsv', col.names = TRUE, row.names = FALSE, sep = '\t', quote = FALSE)
+##modificar los geneId en la ultima palabra para que coincida con la anotacion de arabidopsis
+
+##Tables for T72 expression data
+ID_DGET72 <- as.data.frame(read.csv("dge_table_T72_3time.csv"))
+anotation <- as.data.frame(read.csv ("anotation_avodry_Coge.csv"))
+
+Expredif_T72 <- inner_join(ID_DGET72,anotation, by="gene")
+
+write.csv(Expredif_T72,file = "FinalEXP_anotation_T72_FDR_type_3time.csv")
+#ordenar la tabla con los IDs de arabidopsis y quitarles el .1 o.2
+DGET72_arabidopsis <- as.data.frame(read.csv("dge_table_T72_3time_arabidopsis.csv"))
+
+gene_names <- DGET72_arabidopsis$gene
+gene_pval <- DGET72_arabidopsis$PValue           # deg_table$PValue
+gene_qval <- DGET72_arabidopsis$FDR              # deg_table$FDR
+gene_fc   <- DGET72_arabidopsis$logFC    # deg_table$logFC
+names(gene_pval) <- names(gene_qval) <- gene_names
+deg_names <- gene_names[DGET72_arabidopsis$type == 'significant']
+head(deg_names)
+
+ego72 <- enrichGO(gene = deg_names,         # interested genes
+                  universe = gene_names,    # background genes
+                  OrgDb = org.At.tair.db,
+                  keyType = 'TAIR',
+                  ont = 'BP',
+                  pAdjustMethod = 'BH',
+                  pvalueCutoff = 1.0,
+                  qvalueCutoff = 1.0,
+                  readable = FALSE)
+
+
+ego <- dropGO(ego72, level = 1)
+ego <- dropGO(ego72, level = 2)
+ego <- dropGO(ego72, level = 3)
+go_table <- summary(ego)
+
+
+
+bg_annotated <- as.integer(sapply(strsplit(go_table$BgRatio, '/'), '[', 1))
+go_table <- go_table[100 < bg_annotated & bg_annotated < 500, ]
+go_table$p.adjust <- p.adjust(go_table$pvalue)
+
+go_table[go_table$p.adjust < 0.05, ]
+write.csv(go_table, file = "enriquecimiento_clusterprofiler_T72_3time.csv")
+####generate dotplot plots
+p1 = dotplot(ego, showCategory=20, font.size = 10, x ="GeneRatio", color = 'p.adjust',title = "PB_72 hpt")
+ggsave("dotplot_T72_3time_1.jpeg", device="jpeg")
+
+
+#require(DOSE)
+#dotplot(ego, showCategory=20, x ="GeneRatio", font.size = 7, color = 'p.adjust',title = "PB_72 hpt")
+#goplot(ego, showCategory = 20, color = 'p.adjust')
+#barplot(ego, showCategory=20, color = "p.adjust",title = "PB_72 hpi")
+
+#To overview the significant GO terms and the annotated genes, we use cnetplot to visualize the result of enrichment analysis.
+library(DOSE)
+edox <- setReadable(ego, 'org.At.tair.db', 'TAIR')
+cnetplot(edox, showCategory = 20, font.size = 5, foldChange = gene_fc, categorySize = 'p.adjust')
+edox <- setReadable(ego, 'org.At.tair.db', 'TAIR')
+gene_fc
+gene_names
+names(gene_fc) <- gene_names
+p3 = cnetplot(edox, showCategory = 10, foldChange = gene_fc, categorySize = 'p.adjust')
+ggsave("cnetplot_T72_norm_3time_3.jpeg", device="jpeg", width = 8.47, height = 5.93)
+
+kegg_T72 <- enrichKEGG(gene = deg_names,
+                       organism = 'ath',
+                       universe = gene_names,
+                       keyType = "kegg",
+                       pAdjustMethod = "none",
+                       pvalueCutoff = 0.05)
+
+tab.kegg <- as.data.frame(kegg_T72)
+head(tab.kegg)
+tab.kegg<- subset(tab.kegg, Count>5)
+tab.kegg[1:5, 1:6]
+
+dotplot(kegg_T72, x= "GeneRatio", color = "p.adjust", showCategory = 20, title= "KEGG 72 hpt", orderBy = "x")
+
+write.csv(kegg_T72, file = "kegg_T72_3time.csv")
+
+keggt72 <- setReadable(kegg_T72, 'org.At.tair.db', 'TAIR')
+gene_fc
+gene_names
+names(gene_fc) <- gene_names
+cnetplot(keggt72, showCategory = 20, categorySize="Pvalue", foldChange=gene_fc)
+
