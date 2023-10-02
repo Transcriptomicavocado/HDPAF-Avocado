@@ -1,0 +1,48 @@
+#commands used in the transcriptome Avocado-Fructans
+#Performed by Angélica Cuéllar on 2022
+#mapping using STAR and the avocado drymifolia genome available in Goge
+
+
+
+
+##build index 
+##primero quitarle los caracteres con: sed -i 's/lcl|//g' Persea_americana.faa
+#ruta genoma : /home/alejandra/Documentos/genomes/genome_avodry_Goge/Persea_americana.faa
+#ruta index : /home/alejandra/Documentos/genomes/genome_avodry_Goge/STARindex_avodry
+
+#index: 
+STAR --runThreadN 8 --runMode genomeGenerate --genomeDir /home/alejandra/Documentos/genomes/genome_avodry_Goge/STARindex_avodry --genomeFastaFiles /home/alejandra/Documentos/genomes/genome_avodry_Goge/Persea_americana.faa --sjdbGTFtagExonParentTranscript Parent /home/alejandra/Documentos/genomes/genome_avodry_Goge/Persea_americana_annos1-cds0-id_typename-nu1-upa1-add_chr0.gid29305.gff
+#mapeo
+STAR --genomeDir /home/alejandra/Documentos/genomes/genome_avodry_Goge/STARindex_avodry --readFilesCommand zcat --readFilesIn /media/alejandra/WildType/angelica_work/secuencias_tratamientos_FRUCTANOS/triming_F1_1/F1_1.1_T_R1.fastq.gz /media/alejandra/WildType/angelica_work/secuencias_tratamientos_FRUCTANOS/triming_F1_1/F1_1.1_T_R2.fastq.gz --outFileNamePrefix /media/alejandra/WildType/angelica_work/secuencias_tratamientos_FRUCTANOS/triming_F1_1/F1_1.1_avodry_modif --runThreadN 8 --outSAMtype BAM SortedByCoordinate 
+##resulto arriba de 87% de mapeo
+
+#count with featureCounts
+
+
+
+
+featureCounts -T 4 --countReadPairs -B -p -t exon -g Parent -a /home/alejandra/Documentos/genomes/genome_avodry_Goge/Persea_americana_annos1-cds0-id_typename-nu1-upa1-add_chr0.gid29305.gff -o /media/alejandra/WildType/angelica_work/secuencias_tratamientos_FRUCTANOS/triming_F1_1/counts_F1_1_avodryGogePE.txt /media/alejandra/WildType/angelica_work/secuencias_tratamientos_FRUCTANOS/triming_F1_1/F1_1.1_avodry_modifAligned.sortedByCoord.out.bam
+
+
+ Load annotation file Persea_americana_annos1-cds0-id_typename-nu1-upa1 ... ||
+||    Features : 150651                                                       ||
+||    Meta-features : 22917                                                   ||
+||    Chromosomes/contigs : 3470                                              ||
+||                                                                            ||
+|| Process BAM file F1_1.1_avodry_modifAligned.sortedByCoord.out.bam...       ||
+||    Paired-end reads are included.                                          ||
+||    Total alignments : 64880500                                             ||
+||    Successfully assigned alignments : 53275400 (82.1%)                     ||
+||    Running time : 1.39 minutes                                             ||
+||                                                                            ||
+|| Write the final count table.                                               ||
+|| Write the read assignment summary.       
+
+
+
+##F0_1
+featureCounts -T 4 --countReadPairs -B -p -t exon -g Parent -a /home/alejandra/Documentos/genomes/genome_avodry_Goge/Persea_americana_annos1-cds0-id_typename-nu1-upa1-add_chr0.gid29305.gff -o /media/alejandra/WildType/angelica_work/secuencias_tratamientos_FRUCTANOS/counts_F/counts_F0_1_avodryGogePE.txt /media/alejandra/WildType/angelica_work/secuencias_tratamientos_FRUCTANOS/mapeo_STAR_Avodry/F0_1_avodryAligned.sortedByCoord.out.bam 
+
+#F0_2
+
+featureCounts -T 4 --countReadPairs -B -p -t exon -g Parent -a /home/alejandra/Documentos/genomes/genome_avodry_Goge/Persea_americana_annos1-cds0-id_typename-nu1-upa1-add_chr0.gid29305.gff -o /media/alejandra/WildType/angelica_work/secuencias_tratamientos_FRUCTANOS/counts_F/counts_F0_2_avodryGogePE.txt /media/alejandra/WildType/angelica_work/secuencias_tratamientos_FRUCTANOS/mapeo_STAR_Avodry/F0_2_avodryAligned.sortedByCoord.out.bam 
